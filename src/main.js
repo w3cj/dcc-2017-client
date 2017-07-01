@@ -11,12 +11,12 @@ Vue.config.productionTip = false;
 
 Vue.use(VueMaterial);
 
-// Vue.material.registerTheme('default', {
-//   primary: 'red',
-//   accent: 'blue-grey',
-//   warn: 'orange',
-//   background: 'grey',
-// });
+Vue.material.registerTheme('default', {
+  primary: 'red',
+  accent: 'orange',
+  warn: 'deep-orange',
+  background: 'blue-grey',
+});
 
 /* eslint-disable no-new */
 new Vue({

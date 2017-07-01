@@ -1,68 +1,190 @@
 <template>
-  <div>
-    <section class="venues">
-      <div v-for="venue in venues" class="venue">
-        <h2>{{venue.name}}</h2>
-        <section v-for="startTime in startTimes" class="start-time">
-          <h3 :class="{ 'has-events': venue.events[startTime] }">{{startTime}}</h3>
-          <section v-if="venue.events[startTime]">
-            <div v-for="event in venue.events[startTime]">
-              <h4>{{event.Schedule.title}}</h4>
-              <small>{{event.Schedule.start_time}} - {{event.Schedule.end_time}}</small>
-              <img v-if="event.Guest[0] && event.Guest[0].guest_file_path" class="event-img" :src="'https://register.growtix.com/attachments/media/small/' + event.Guest[0].guest_file_path + '/' + event.Guest[0].guest_file_name" alt="guest">
-            </div>
-          </section>
-        </section>
+  <div class="container">
+    <div class="">
+      <h2>Choose a Day</h2>
+      <md-button @click.native="selectedDay = 'Friday'; load('2017-06-30')" class="md-raised md-primary">Friday</md-button>
+      <md-button @click.native="selectedDay = 'Saturday'; load('2017-07-01')" class="md-raised md-accent">Saturday</md-button>
+      <md-button @click.native="selectedDay = 'Sunday'; load('2017-07-02')" class="md-raised md-secondary">Sunday</md-button>
+    </div>
+    <div v-if="loading">
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+      <md-progress class="md-accent" md-indeterminate></md-progress>
+    </div>
+    <div v-if="!loading && loaded">
+      <h1>{{selectedDay}}</h1>
+      <md-input-container>
+        <label>Search</label>
+        <md-input v-model="search"></md-input>
+      </md-input-container>
+      <div class="">
+        <h3>Categories</h3>
+        <md-button @click.native="selectedCategory = ''" class="md-raised md-primary">All</md-button>
+        <md-button v-for="(value, name) in categories" :key="name" @click.native="selectedCategory = name" class="md-raised md-secondary" :class="{'md-accent': selectedCategory == name}">{{name}}</md-button>
       </div>
-    </section>
+      <div class="">
+        <h3 v-if="hasHiddenVenues">Hidden</h3>
+        <md-button v-for="(value, name) in hiddenVenues" :key="name" v-if="value" @click.native="hiddenVenues[name] = false" class="md-raised md-primary">{{name}}</md-button>
+      </div>
+      <h2>{{selectedCategory}}</h2>
+      <section class="venues">
+        <div v-for="venue in filteredVenues" class="venue" v-if="!hiddenVenues[venue.name]">
+          <md-button @click.native="hiddenVenues[venue.name] = true" class="md-raised md-warn">Hide</md-button>
+          <h2>{{venue.name}}</h2>
+          <section v-for="startTime in startTimes" class="start-time">
+            <h3 :class="{ 'has-events': venue.events[startTime] }">{{startTime}}</h3>
+            <section v-if="venue.events[startTime]">
+              <div v-for="event in venue.events[startTime]" v-if="!event.hidden">
+                <h4>{{event.Schedule.title}}</h4>
+                <small>{{event.Schedule.start_time}} - {{event.Schedule.end_time}}</small>
+                <md-button class="md-icon-button md-raised" id="custom" @click="openDialog('dialog1', event)">
+                  <md-icon>description</md-icon>
+                </md-button>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+      <md-dialog md-open-from="#custom" md-close-to="#custom" ref="dialog1">
+        <md-dialog-title>{{selectedEvent.Schedule.title}}</md-dialog-title>
+        <md-dialog-content>
+          <div class="guests">
+            <div class="guest" v-for="guest in selectedEvent.Guest">
+              <img v-if="guest.guest_file_path && guest.guest_file_name" class="event-img" :src="'https://register.growtix.com/attachments/media/med/' + guest.guest_file_path + '/' + guest.guest_file_name" alt="guest">
+              <img v-else src="https://register.growtix.com/attachments/media/small/16/34/57/5924d9cb-a114-4cc4-a80a-349bac1c10ea.png" alt="">
+              <p>{{guest.first_name}} {{guest.last_name}}</p>
+            </div>
+          </div>
+          <p class="event-description">{{selectedEvent.Schedule.description}}</p>
+        </md-dialog-content>
+        <md-dialog-actions>
+          <md-button class="md-primary" @click="closeDialog('dialog1')">Cancel</md-button>
+          <md-button class="md-primary" @click="closeDialog('dialog1')">Ok</md-button>
+        </md-dialog-actions>
+      </md-dialog>
+    </div>
   </div>
 </template>
 
 <script>
+import Data from '../lib/Data';
+
 export default {
   name: 'hello',
   data() {
     return {
+      selectedDay: '',
+      loading: false,
+      loaded: false,
+      selectedEvent: {
+        Schedule: {},
+      },
+      search: '',
+      selectedCategory: '',
+      hiddenVenues: localStorage.hiddenVenues ? JSON.parse(localStorage.hiddenVenues) : {},
       venues: [],
       startTimes: [],
+      categories: [],
     };
   },
   mounted() {
-    this.load();
+    if (localStorage.date) {
+      this.selectedDay = localStorage.selectedDay;
+      this.load(localStorage.date);
+    }
+  },
+  computed: {
+    hasHiddenVenues() {
+      return Object.keys(this.hiddenVenues).some(name => this.hiddenVenues[name]);
+    },
+    filteredVenues() {
+      const regexp = new RegExp(this.search, 'gi');
+      const venues = this.venues.filter((venue) => {
+        const visibleEvents = Object.keys(venue.events).filter((time) => {
+          const events = venue.events[time];
+          return events.filter((event) => {
+            let match = false;
+            if (!this.search || (this.search && event.json.match(regexp))) {
+              event.hidden = false;
+              match = true;
+            } else {
+              event.hidden = true;
+            }
+            return !this.selectedCategory ? match :
+              match && event.ScheduleCategory.some(c => c.name.trim() === this.selectedCategory);
+          }).length > 0;
+        });
+        return visibleEvents.length > 0;
+      });
+
+      return venues;
+    },
   },
   methods: {
-    load() {
+    openDialog(ref, event) {
+      this.selectedEvent = event;
+      this.$refs[ref].open();
+    },
+    closeDialog(ref) {
+      this.$refs[ref].close();
+    },
+    load(date) {
+      localStorage.date = date;
+      localStorage.selectedDay = this.selectedDay;
+      this.loading = true;
       Promise.all([
-        fetch('https://dcc-2017-api.now.sh/api/venue')
-          .then(res => res.json()),
-        fetch('https://dcc-2017-api.now.sh/api/schedule/2017-07-01')
-          .then(res => res.json()),
+        Data.getVenues(),
+        Data.getEvents(date),
       ]).then(({ 0: venues, 1: events }) => {
-        console.log(events);
         const allVenues = [];
         const venuesById = {};
         const startTimes = {};
+        const hiddenVenues = {};
 
         venues.forEach(({ VenueLocation: venue }) => {
           allVenues.push(venue);
+          hiddenVenues[venue.name] = false;
           venuesById[venue.id] = venue;
           venuesById[venue.id].events = {};
         });
 
+        this.hiddenVenues = hiddenVenues;
+        let categories = [];
+
         events.forEach((event) => {
           const location_id = event.VenueLocation.id;
-          const start_time = event.Schedule.start_time;
-          const venue = venuesById[location_id];
+          event.hidden = false;
+          event.json = JSON.stringify(event);
+          if (location_id) {
+            const start_time = event.Schedule.start_time;
+            const venue = venuesById[location_id];
 
-          venue.events[start_time] = venue.events[start_time] || [];
-          venue.events[start_time].push(event);
-          if (!startTimes[start_time]) {
-            this.startTimes.push(start_time);
+            venue.events[start_time] = venue.events[start_time] || [];
+            venue.events[start_time].push(event);
+            if (!startTimes[start_time]) {
+              this.startTimes.push(start_time);
+            }
+            startTimes[start_time] = true;
           }
-          startTimes[start_time] = true;
+
+          categories = categories.concat(event.ScheduleCategory.map(c => c.name.trim()));
         });
 
+        this.categories = categories.reduce((all, c) => {
+          all[c] = true;
+          return all;
+        }, {});
+
         this.venues = allVenues;
+        this.loading = false;
+        this.loaded = true;
       });
     },
   },
@@ -70,6 +192,11 @@ export default {
 </script>
 
 <style>
+.container {
+  padding: 2em;
+  font-size: 1.5em;
+}
+
 .venues {
   display: flex;
   overflow-x: scroll;
@@ -84,7 +211,7 @@ export default {
 }
 
 .start-time {
-  height: 150px;
+  height: 170px;
   min-width: 400px;
   max-width: 400px;
   overflow: scroll;
@@ -96,6 +223,32 @@ export default {
 }
 
 .has-events {
-  color: red;
+  color: #f44336;
+}
+
+.event-description {
+  white-space: pre-wrap;
+}
+
+.guests {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.guest {
+  display: flex;
+  flex-direction: column;
+  margin: 1em;
+  justify-content: center;
+  align-items: center;
+}
+
+.guest img {
+  width: 50px;
+  height: auto;
+}
+
+.guest p {
+  font-size: 1.2em;
 }
 </style>
