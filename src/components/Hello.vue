@@ -20,11 +20,15 @@
     </div>
     <div v-if="!loading && loaded">
       <h1>{{selectedDay}}</h1>
+      <div>
+        <md-radio v-model="viewMySchedule" id="my-test1" name="my-test-group1" :md-value="false">All Events</md-radio>
+        <md-radio v-model="viewMySchedule" id="my-test2" name="my-test-group1" :md-value="true">My Schedule</md-radio>
+      </div>
       <md-input-container>
         <label>Search</label>
         <md-input v-model="search"></md-input>
       </md-input-container>
-      <div class="">
+      <div class="" v-if="!viewMySchedule">
         <h3>Categories</h3>
         <md-button @click.native="selectedCategory = ''" class="md-raised md-primary">All</md-button>
         <md-button v-for="(value, name) in categories" :key="name" @click.native="selectedCategory = name" class="md-raised md-secondary" :class="{'md-accent': selectedCategory == name}">{{name}}</md-button>
@@ -46,6 +50,12 @@
                 <small>{{event.Schedule.start_time}} - {{event.Schedule.end_time}}</small>
                 <md-button class="md-icon-button md-raised" id="custom" @click="openDialog('dialog1', event)">
                   <md-icon>description</md-icon>
+                </md-button>
+                <md-button v-if="!mySchedule[event.Schedule.id]" @click.native="addToMySchedule(event.Schedule.id)" class="md-icon-button md-raised md-accent">
+                  <md-icon>add</md-icon>
+                </md-button>
+                <md-button v-else @click.native="removeFromMySchedule(event.Schedule.id)" class="md-icon-button md-raised md-primary">
+                  <md-icon>done</md-icon>
                 </md-button>
               </div>
             </section>
@@ -83,6 +93,7 @@ export default {
       selectedDay: '',
       loading: false,
       loaded: false,
+      viewMySchedule: false,
       selectedEvent: {
         Schedule: {},
       },
@@ -92,6 +103,7 @@ export default {
       venues: [],
       startTimes: [],
       categories: [],
+      mySchedule: localStorage.mySchedule ? JSON.parse(localStorage.mySchedule) : {},
     };
   },
   mounted() {
@@ -111,14 +123,29 @@ export default {
           const events = venue.events[time];
           return events.filter((event) => {
             let match = false;
-            if (!this.search || (this.search && event.json.match(regexp))) {
-              event.hidden = false;
-              match = true;
-            } else {
+
+            if (this.viewMySchedule && this.mySchedule[event.Schedule.id]) {
+              if (!this.search || (this.search && event.json.match(regexp))) {
+                event.hidden = false;
+                match = true;
+              } else {
+                event.hidden = true;
+              }
+              return match;
+            } else if (this.viewMySchedule && !this.mySchedule[event.Schedule.id]) {
               event.hidden = true;
+            } else if (!this.viewMySchedule) {
+              if (!this.search || (this.search && event.json.match(regexp))) {
+                event.hidden = false;
+                match = true;
+              } else {
+                event.hidden = true;
+              }
+              return !this.selectedCategory ? match :
+                match && event.ScheduleCategory.some(c => c.name.trim() === this.selectedCategory);
             }
-            return !this.selectedCategory ? match :
-              match && event.ScheduleCategory.some(c => c.name.trim() === this.selectedCategory);
+
+            return match;
           }).length > 0;
         });
         return visibleEvents.length > 0;
@@ -134,6 +161,14 @@ export default {
     },
     closeDialog(ref) {
       this.$refs[ref].close();
+    },
+    removeFromMySchedule(id) {
+      this.$set(this.mySchedule, id, false);
+      localStorage.mySchedule = JSON.stringify(this.mySchedule);
+    },
+    addToMySchedule(id) {
+      this.$set(this.mySchedule, id, true);
+      localStorage.mySchedule = JSON.stringify(this.mySchedule);
     },
     load(date) {
       localStorage.date = date;
@@ -250,5 +285,9 @@ export default {
 
 .guest p {
   font-size: 1.2em;
+}
+
+.md-theme-default.md-input-container.md-input-focused input {
+  -webkit-text-fill-color: black;
 }
 </style>
